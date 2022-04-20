@@ -422,3 +422,37 @@ resource "aws_codepipeline" "aft_codestar_customizations_codepipeline" {
     }
   }
 }
+
+resource "aws_sns_topic" "notif" {
+  name = "code-pipeline-notification"
+}
+
+data "aws_iam_policy_document" "notif_access" {
+  statement {
+    actions = ["sns:Publish"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["codestar-notifications.amazonaws.com"]
+    }
+
+    resources = [aws_sns_topic.notif.arn]
+  }
+}
+
+resource "aws_sns_topic_policy" "default" {
+  arn    = aws_sns_topic.notif.arn
+  policy = data.aws_iam_policy_document.notif_access.json
+}
+
+resource "aws_codestarnotifications_notification_rule" "commits" {
+  detail_type    = "BASIC"
+  event_type_ids = ["codepipeline-pipeline-action-execution-failed"]
+
+  name     = "${var.account_id}-customizations-pipeline-notification"
+  resource = aws_codepipeline.aft_codecommit_customizations_codepipeline[0.0].arn
+
+  target {
+    address = aws_sns_topic.notif.arn
+  }
+}
